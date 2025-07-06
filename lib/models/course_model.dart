@@ -21,4 +21,22 @@ class Course {
   void resetSkip() {
     totalClasses -= 1;
   }
+
+  // Convert Course to Map for JSON serialization
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'totalClasses': totalClasses,
+      'attendedClasses': attendedClasses,
+    };
+  }
+
+  // Create Course from Map for JSON deserialization
+  factory Course.fromJson(Map<String, dynamic> json) {
+    return Course(
+      name: json['name'],
+      totalClasses: json['totalClasses'],
+      attendedClasses: json['attendedClasses'],
+    );
+  }
 }

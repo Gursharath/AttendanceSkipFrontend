@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../models/course_model.dart';
 import '../providers/theme_provider.dart';
+import '../utils/course_storage.dart';
 import 'add_course_screen.dart';
 import 'simulate_screen.dart';
 
@@ -15,17 +16,99 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Course> courses = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCourses();
+  }
+
+  Future<void> _loadCourses() async {
+    try {
+      final loadedCourses = await CourseStorage.loadCourses();
+      setState(() {
+        courses = loadedCourses;
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error loading courses: $e')));
+    }
+  }
+
+  Future<void> _saveCourses() async {
+    try {
+      await CourseStorage.saveCourses(courses);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error saving courses: $e')));
+    }
+  }
 
   void _addCourse(Course course) {
     setState(() {
       courses.add(course);
     });
+    _saveCourses();
+  }
+
+  void _editCourse(Course course, int index) {
+    setState(() {
+      courses[index] = course;
+    });
+    _saveCourses();
+  }
+
+  void _deleteCourse(int index) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text('Delete Course', style: GoogleFonts.poppins()),
+            content: Text('Are you sure you want to delete this course?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    courses.removeAt(index);
+                  });
+                  _saveCourses();
+                  Navigator.pop(context);
+                },
+                child: Text('Delete', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+    );
   }
 
   void _navigateToAddCourse() {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => AddCourseScreen(onAdd: _addCourse)),
+    );
+  }
+
+  void _navigateToEditCourse(Course course, int index) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => AddCourseScreen(
+              onAdd: (editedCourse) => _editCourse(editedCourse, index),
+              course: course,
+            ),
+      ),
     );
   }
 
@@ -47,6 +130,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final themeProvider = Provider.of<ThemeProvider>(context);
+
+    if (isLoading) {
+      return Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Colors.teal)),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -77,9 +166,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
                 decoration: BoxDecoration(
-                  color: overallAttendance >= 75
-                      ? Colors.teal[100]
-                      : Colors.red[100],
+                  color:
+                      overallAttendance >= 75
+                          ? Colors.teal[100]
+                          : Colors.red[100],
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
@@ -100,9 +190,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: GoogleFonts.poppins(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: overallAttendance >= 75
-                            ? Colors.teal[900]
-                            : Colors.red[900],
+                        color:
+                            overallAttendance >= 75
+                                ? Colors.teal[900]
+                                : Colors.red[900],
                       ),
                     ),
                   ],
@@ -110,52 +201,69 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           Expanded(
-            child: courses.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No courses added yet.',
-                      style: TextStyle(fontSize: 16),
+            child:
+                courses.isEmpty
+                    ? const Center(
+                      child: Text(
+                        'No courses added yet.',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    )
+                    : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      itemCount: courses.length,
+                      itemBuilder: (context, index) {
+                        final course = courses[index];
+                        return Card(
+                          elevation: 6,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            title: Text(
+                              course.name,
+                              style: GoogleFonts.poppins(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Attended: ${course.attendedClasses}/${course.totalClasses}',
+                              style: GoogleFonts.poppins(fontSize: 14),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${course.attendancePercentage.toStringAsFixed(1)}%',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color:
+                                        course.attendancePercentage >= 75
+                                            ? Colors.green
+                                            : Colors.red,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () => _deleteCourse(index),
+                                ),
+                              ],
+                            ),
+                            onTap: () => _navigateToEditCourse(course, index),
+                          ),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: courses.length,
-                    itemBuilder: (context, index) {
-                      final course = courses[index];
-                      return Card(
-                        elevation: 6,
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ListTile(
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          title: Text(
-                            course.name,
-                            style: GoogleFonts.poppins(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'Attended: ${course.attendedClasses}/${course.totalClasses}',
-                            style: GoogleFonts.poppins(fontSize: 14),
-                          ),
-                          trailing: Text(
-                            '${course.attendancePercentage.toStringAsFixed(1)}%',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: course.attendancePercentage >= 75
-                                  ? Colors.green
-                                  : Colors.red,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
           ),
         ],
       ),
